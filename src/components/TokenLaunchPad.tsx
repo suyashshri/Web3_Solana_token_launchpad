@@ -1,12 +1,18 @@
 import {
+  createInitializeMetadataPointerInstruction,
   createInitializeMint2Instruction,
+  ExtensionType,
   getMinimumBalanceForRentExemptMint,
+  getMintLen,
+  LENGTH_SIZE,
   MINT_SIZE,
-  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+  TYPE_SIZE,
 } from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
 import { useState } from "react";
+import { createInitializeInstruction, pack } from "@solana/spl-token-metadata";
 
 const TokenLaunchPad = () => {
   const [name, setName] = useState<string>();
@@ -22,6 +28,24 @@ const TokenLaunchPad = () => {
       throw new Error("Please connect your wallet first");
     }
     const keypair = Keypair.generate();
+
+    const metadata = {
+      mint: keypair.publicKey,
+      name: "YASH",
+      symbol: "YH",
+      uri: "https://cdn.100xdevs.com/metadata.json",
+      additionalMetadata: [],
+    };
+
+    const mintLen = getMintLen([ExtensionType.MetadataPointer]);
+    console.log("mintLen", mintLen);
+
+    console.log("TYPE_SIZE", TYPE_SIZE);
+    console.log("LENGTH_SIZE", LENGTH_SIZE);
+    console.log("pack(metadata).length", pack(metadata).length);
+
+    const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
+
     const lamports = await getMinimumBalanceForRentExemptMint(connection);
     const transaction = new Transaction().add(
       SystemProgram.createAccount({
@@ -29,15 +53,31 @@ const TokenLaunchPad = () => {
         newAccountPubkey: keypair.publicKey,
         space: MINT_SIZE,
         lamports,
-        programId: TOKEN_PROGRAM_ID,
+        programId: TOKEN_2022_PROGRAM_ID,
       }),
+      createInitializeMetadataPointerInstruction(
+        keypair.publicKey,
+        wallet.publicKey,
+        keypair.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ),
       createInitializeMint2Instruction(
         keypair.publicKey,
         6,
         wallet.publicKey,
         wallet.publicKey,
-        TOKEN_PROGRAM_ID
-      )
+        TOKEN_2022_PROGRAM_ID
+      ),
+      createInitializeInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        metadata: keypair.publicKey,
+        updateAuthority: wallet.publicKey,
+        mint: keypair.publicKey,
+        mintAuthority: wallet.publicKey,
+        name: metadata.name,
+        symbol: metadata.symbol,
+        uri: metadata.uri,
+      })
     );
 
     const recentBlockHash = await connection.getLatestBlockhash();
