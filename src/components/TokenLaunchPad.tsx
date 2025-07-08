@@ -1,7 +1,10 @@
 import {
+  createAssociatedTokenAccountInstruction,
   createInitializeMetadataPointerInstruction,
   createInitializeMint2Instruction,
+  createMintToInstruction,
   ExtensionType,
+  getAssociatedTokenAddressSync,
   getMinimumBalanceForRentExemptMint,
   getMintLen,
   LENGTH_SIZE,
@@ -24,15 +27,15 @@ const TokenLaunchPad = () => {
   const { connection } = useConnection();
 
   async function createToken() {
-    if (!wallet || !wallet.publicKey) {
+    if (!wallet || !wallet.publicKey || !name || !symbol || !initialSupply) {
       throw new Error("Please connect your wallet first");
     }
     const keypair = Keypair.generate();
 
     const metadata = {
       mint: keypair.publicKey,
-      name: "YASH",
-      symbol: "YH",
+      name: name,
+      symbol: symbol,
       uri: "https://cdn.100xdevs.com/metadata.json",
       additionalMetadata: [],
     };
@@ -45,6 +48,8 @@ const TokenLaunchPad = () => {
     console.log("pack(metadata).length", pack(metadata).length);
 
     const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
+
+    console.log("metadataLen", metadataLen);
 
     const lamports = await getMinimumBalanceForRentExemptMint(connection);
     const transaction = new Transaction().add(
@@ -86,6 +91,43 @@ const TokenLaunchPad = () => {
 
     transaction.partialSign(keypair);
     await wallet.sendTransaction(transaction, connection);
+
+    console.log(`Token mint created at ${keypair.publicKey.toBase58()}`);
+
+    const associatedToken = getAssociatedTokenAddressSync(
+      keypair.publicKey,
+      wallet.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID
+    );
+    console.log(associatedToken.toBase58());
+
+    const transaction2 = new Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        wallet.publicKey,
+        associatedToken,
+        wallet.publicKey,
+        keypair.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+
+    await wallet.sendTransaction(transaction2, connection);
+
+    const transaction3 = new Transaction().add(
+      createMintToInstruction(
+        keypair.publicKey,
+        associatedToken,
+        wallet.publicKey,
+        parseInt(initialSupply),
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    );
+
+    await wallet.sendTransaction(transaction3, connection);
+
+    console.log("Minted!");
   }
   return (
     <div
